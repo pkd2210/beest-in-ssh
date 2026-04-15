@@ -24,48 +24,76 @@ const sshServer = new Server({
     session.on('shell', (accept) => {
         const stream = accept();
         // Define user variables here
-        let authCookie = '';
+        let refreshToken = null;
+        let auth_token = null;
+
         // Actuall code:
         stream.write('Welcome to the beest.hackclub.com!\r\n');
-            promptAuthKey();
-
+      promptAuthKey();
 
         // functions
         async function promptAuthKey() {
-          stream.write('\r\nPlease enter auth token: ');
-            let tempAuthKey = '';
-            stream.on('data', async (data) => {
-                if (data.toString().trim() === '') {
-                    const authenticated = await isAuthenticated(tempAuthKey);
-                    if (authenticated) {
-                        stream.write('\r\nAuthentication successful! Access granted.\r\n');
-                    } else {
-                        stream.write('\r\nAuthentication failed! Please try again.\r\n');
-                        tempAuthKey = '';
-                      stream.write('\r\nPlease enter auth token: ');
-                        return;
-                    }
-                } else {
-                stream.write(data.toString());
-                tempAuthKey += data.toString().trim();
-                  console.log('Received auth input:', tempAuthKey);
+        refreshToken = await readLine('\r\nPlease enter your refresh_token: ', true);
+        auth_token = await readLine('\r\nPlease enter your auth_token: ', true);
+
+        await isAuthenticated(auth_token, refreshToken);
+      }
+
+      function readLine(promptText, maskInput = false) {
+        return new Promise((resolve) => {
+          let buffer = '';
+          stream.write(promptText);
+
+          const onData = (data) => {
+            const text = data.toString('utf8');
+
+            for (const ch of text) {
+              if (ch === '\r' || ch === '\n') {
+                stream.write('\r\n');
+                stream.removeListener('data', onData);
+                resolve(buffer.trim());
+                return;
+              }
+
+              if (ch === '\u0003') {
+                stream.write('^C\r\n');
+                stream.end();
+                return;
+              }
+
+              if (ch === '\u007f' || ch === '\b') {
+                if (buffer.length > 0) {
+                  buffer = buffer.slice(0, -1);
+                  stream.write(maskInput ? '\b \b' : '\b \b');
                 }
-            });
-            
+                continue;
+              }
+
+              buffer += ch;
+              stream.write(maskInput ? '*' : ch);
+            }
+          };
+
+          stream.on('data', onData);
+        });
         }
 
-        async function isAuthenticated(authKey) {
-            console.log('authKey to check:', authKey);
+        async function isAuthenticated(auth_token, refreshToken) {
+            // Make a request to https://beest.hackclub.com/api/shop/pipes with the provided tokens to check if they are valid
             const response = await fetch('https://beest.hackclub.com/api/shop/pipes', {
+                method: 'GET',
                 headers: {
-                    'Cookie': `auth_token=${authKey}`,
-                    'auth_token': authKey
+                    'Cookie' : `auth_token=${auth_token}; refresh_token=${refreshToken}`
                 }
             });
-            console.log('response: ', response);
-            return response.status === 200;
+            if (response.status === 200) {
+                stream.write('\r\nAuthentication successful! You can now use the beest CLI.\r\n');
+                return true;
+            } else {
+                stream.write('\r\nAuthentication failed. Please check your tokens and try again.\r\n');
+                return false;
+            }
         }
-
         // End of stream
     });
   });
