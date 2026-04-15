@@ -1,6 +1,16 @@
 const { Server } = require('ssh2');
 const fs = require('fs');
 
+// import all the commands
+const commands = {};
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+    const command = require(`./commands/${file}`);
+    commands[command.name] = command;
+}
+
+
+
 const sshServer = new Server({
     hostKeys: [fs.readFileSync('host.key')]
 }, (client) => {
@@ -21,15 +31,20 @@ const sshServer = new Server({
       accept();
     });
 
-    session.on('shell', (accept) => {
+    session.on('shell', async (accept) => {
         const stream = accept();
         // Define user variables here
         let refreshToken = null;
         let auth_token = null;
 
-        // Actuall code:
-        stream.write('Welcome to the beest.hackclub.com!\r\n');
-      promptAuthKey();
+        // Login
+        stream.write('Welcome to the beest.hackclub.com! (Beest CLI)\r\n');
+        await promptAuthKey();
+        // Console
+
+        if (isAuthenticated(auth_token, refreshToken)) {
+            await startConsole();
+        }
 
         // functions
         async function promptAuthKey() {
@@ -37,6 +52,19 @@ const sshServer = new Server({
         auth_token = await readLine('\r\nPlease enter your auth_token: ', true);
 
         await isAuthenticated(auth_token, refreshToken);
+      }
+
+      async function startConsole() {
+        stream.write('\r\nYou can now use the beest CLI. Type "help" for a list of commands.\r\n');
+        while (true) {
+          const command = await readLine('> ');
+            if (command.trim() === '') continue;
+            if (commands[command]) {
+                commands[command].execute(stream, auth_token, refreshToken);
+            } else {
+                stream.write(`\r\nCommand not found: ${command}\r\n`);
+            }
+        }
       }
 
       function readLine(promptText, maskInput = false) {
@@ -94,7 +122,6 @@ const sshServer = new Server({
                 }
             });
             if (response.status === 200) {
-                stream.write('\r\nAuthentication successful! You can now use the beest CLI.\r\n');
                 return true;
             } else {
                 stream.write('\r\nAuthentication failed. Please check your tokens and try again.\r\n');
