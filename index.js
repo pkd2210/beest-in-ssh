@@ -47,6 +47,13 @@ const sshServer = new Server({
           const onData = (data) => {
             const text = data.toString('utf8');
 
+            // if user ctrl c then exit
+            if (text.includes('\u0003')) {
+              stream.write('^C\r\n');
+              stream.end();
+              return;
+            }
+
             for (const ch of text) {
               if (ch === '\r' || ch === '\n') {
                 stream.write('\r\n');
