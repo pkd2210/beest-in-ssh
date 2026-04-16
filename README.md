@@ -25,3 +25,8 @@ module.exports = {
 }
 ```
 3. Add command to the Commands list in README.md
+   
+# TODO LIST
+- [ ] Create Project command
+- [ ] Edit Project Command
+- [ ] Buy Command
