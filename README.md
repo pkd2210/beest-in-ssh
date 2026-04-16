@@ -29,5 +29,5 @@ module.exports = {
 # TODO LIST
 - [ ] Create Project command
 - [ ] Edit Project Command
-- [ ] Buy Command
+- [V] Buy Command - Not tested, don't have enough pipes to test
 - [ ] Someway to save refresh and auth keys, securely / not on server

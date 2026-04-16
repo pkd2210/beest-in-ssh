@@ -1,6 +1,54 @@
 const { Server } = require('ssh2');
 const fs = require('fs');
 
+function readLine(stream, promptText, maskInput = false) {
+  return new Promise((resolve) => {
+    let buffer = '';
+    stream.write(promptText);
+
+    const onData = (data) => {
+      const text = data.toString('utf8');
+
+      // if user ctrl c then exit
+      if (text.includes('\u0003')) {
+        stream.write('^C\r\n');
+        stream.end();
+        return;
+      }
+
+      for (const ch of text) {
+        if (ch === '\r' || ch === '\n') {
+          stream.write('\r\n');
+          stream.removeListener('data', onData);
+          resolve(buffer.trim());
+          return;
+        }
+
+        if (ch === '\u0003') {
+          stream.write('^C\r\n');
+          stream.end();
+          return;
+        }
+
+        if (ch === '\u007f' || ch === '\b') {
+          if (buffer.length > 0) {
+            buffer = buffer.slice(0, -1);
+            stream.write(maskInput ? '\b \b' : '\b \b');
+          }
+          continue;
+        }
+
+        buffer += ch;
+        stream.write(maskInput ? '*' : ch);
+      }
+    };
+
+    stream.on('data', onData);
+  });
+}
+
+module.exports.readLine = readLine;
+
 // import all the commands
 const commands = {};
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
@@ -48,8 +96,8 @@ const sshServer = new Server({
 
         // functions
         async function promptAuthKey() {
-        refreshToken = await readLine('\r\nPlease enter your refresh_token: ', true);
-        auth_token = await readLine('\r\nPlease enter your auth_token: ', true);
+        refreshToken = await readLine(stream, '\r\nPlease enter your refresh_token: ', true);
+        auth_token = await readLine(stream, '\r\nPlease enter your auth_token: ', true);
 
         await isAuthenticated(auth_token, refreshToken);
       }
@@ -57,7 +105,7 @@ const sshServer = new Server({
       async function startConsole() {
         stream.write('\r\nYou can now use the beest CLI. Type "help" for a list of commands.\r\n');
         while (true) {
-          const command = await readLine('> ');
+          const command = await readLine(stream, '> ');
             if (command.trim() === '') continue;
             if (commands[command]) {
                 commands[command].execute(stream, auth_token, refreshToken);
@@ -66,52 +114,6 @@ const sshServer = new Server({
             }
         }
       }
-
-      function readLine(promptText, maskInput = false) {
-        return new Promise((resolve) => {
-          let buffer = '';
-          stream.write(promptText);
-
-          const onData = (data) => {
-            const text = data.toString('utf8');
-
-            // if user ctrl c then exit
-            if (text.includes('\u0003')) {
-              stream.write('^C\r\n');
-              stream.end();
-              return;
-            }
-
-            for (const ch of text) {
-              if (ch === '\r' || ch === '\n') {
-                stream.write('\r\n');
-                stream.removeListener('data', onData);
-                resolve(buffer.trim());
-                return;
-              }
-
-              if (ch === '\u0003') {
-                stream.write('^C\r\n');
-                stream.end();
-                return;
-              }
-
-              if (ch === '\u007f' || ch === '\b') {
-                if (buffer.length > 0) {
-                  buffer = buffer.slice(0, -1);
-                  stream.write(maskInput ? '\b \b' : '\b \b');
-                }
-                continue;
-              }
-
-              buffer += ch;
-              stream.write(maskInput ? '*' : ch);
-            }
-          };
-
-          stream.on('data', onData);
-        });
-        }
 
         async function isAuthenticated(auth_token, refreshToken) {
             // Make a request to https://beest.hackclub.com/api/shop/pipes with the provided tokens to check if they are valid
