@@ -30,3 +30,4 @@ module.exports = {
 - [ ] Create Project command
 - [ ] Edit Project Command
 - [ ] Buy Command
+- [ ] Someway to save refresh and auth keys, securely / not on server
